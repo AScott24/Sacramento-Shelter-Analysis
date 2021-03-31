@@ -1,2 +1,2 @@
 # Sacramento-Shelter-Analysis
-RMarkdown Code Used for Analysis
+The repository houses the RMarkdown Code used for the analysis on Sacramento animal shelters 
