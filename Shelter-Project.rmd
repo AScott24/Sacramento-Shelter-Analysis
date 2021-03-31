@@ -1,0 +1,146 @@
+---
+title: "Pets!"
+author: "Andrew Ramirez"
+date: "March 30, 2021"
+output: pdf_document
+distill::distill_article:
+        self-contained: false
+---
+
+```{r setup, include =FALSE}
+# Libraries
+library(tidyverse)
+library(janitor) # perfectly format data frame column names, isolate partially-duplicate records
+library(visdat) # provides visualizations of entire data set variables and missing data
+library(skimr) # creative approach to summary statistics 
+library(purrr)
+library(scales)
+library(ggpubr)
+library(esquisse)
+library(hrbrthemes)
+library(lubridate)
+
+# Read Input
+intakesandoutcomes <-read.csv('Animal_Intakes_and_Outcomes_for_the_Last_3_Years.csv', fileEncoding = "UTF-8-BOM") #Updated monthly
+
+
+## Visualize Data for Completeness
+vis_dat(intakesandoutcomes) 
+vis_miss(intakesandoutcomes)
+
+
+## Observe Advanced Summary Statistics
+skim(intakesandoutcomes)
+
+
+## Check for and Remove Duplicates
+get_dupes(intakesandoutcomes)
+
+
+## Change Variables to Correct Data Type
+### Change Object ID
+intakesandoutcomes$OBJECTID <- as.character(as.numeric(intakesandoutcomes$OBJECTID))
+
+
+## Change Dates to DD-MM-YY
+intakesandoutcomes$Intake_Date <- as.Date(as.character(intakesandoutcomes$Intake_Date, "%m/%d/%Y"))
+
+
+## Repeat Observe Advanced Summary Statistics (Post Data Transformations)
+skim(intakesandoutcomes)
+
+```
+
+I live in East Sacramento and while I'm not a big cat guy (mainly due to being allergic),       
+plenty of neighborhood cats stroll into my backyard. 
+
+While observing these cats, an idea came to me. 
+How did the impact of COVID-19 affect animal shelters in Sacramento? 
+To answer that, I took to City of Sacramento datasets and started exploring. 
+
+I created visualizations to illustrate how animals end up in a shelter, 
+the color of the animals admitted, and type of animal (i.e Cat or Dog) most commonly admitted.
+
+```{r echo=FALSE}
+# Create and Transform Project Data Frames
+
+## Create Multi-Year Dataset for Intake Time Series
+intakesandoutcomests <- intakesandoutcomes %>% group_by(month = floor_date(Intake_Date,  unit = "month")) %>% filter(month <= "2020-12-01")
+
+## Create Dataset for Count of Number of Animals for 2020 
+countoflastyrintakes <- intakesandoutcomes %>% filter(Intake_Date >= "2020-01-01" & Intake_Date <= "2020-12-31")
+
+## Creating Dataset for The Most Common Reason for Shelter Admittal (i.e Stray, Foster) for 2020
+countintake <- countoflastyrintakes %>% group_by(Intake_Type) %>% count(vars = Intake_Type)
+countintakerefined <- countintake %>% filter(Intake_Type %in% c("STRAY", "FOSTER", "OWNER SUR", "CONFISCATE", "RETURN", "QUARANTINE"))
+```
+
+
+```{r echo=FALSE,  fig.align= 'center', fig.width = 5, fig.height= 7, warning=FALSE}
+# Create Visual for Multi-Year Intake of Animals 
+q <- ggplot(intakesandoutcomests, aes(x=month)) + geom_line(stat = "count") + 
+  scale_x_date(NULL, date_labels = "%b %y", date_breaks = "3 months")  + 
+  theme_minimal() + theme(axis.text = element_text(angle = 90))+ 
+  labs(y = "Number of Animals", title = "Animals Admitted to Sacramento Shelters ", subtitle = "February 2018 - December 2020")
+
+q
+
+#ggsave("AnimalAdmits.png", width = 5, height = 7)
+
+```
+To get context for how many animals were admitted to shelters during 2020 I decided to create a time series.
+The time series shows the seasonality in the data. Animals are admitted to shelters more in the
+spring/summer months and less in the winter months. What's interesting about 2020 is that the number of animals admitted into the shelters
+fell precipitously around the same time governments enacted lockdowns and quarantines. Logically, I'd assume more would be taken into shelters as economic factors like unemployment skyrocketed. However, a case could be made that less animals were admitted as their were less people outside (due to lockdowns) to notify/ call in the animals.   
+   
+
+```{r echo=FALSE, fig.align= 'center', fig.width = 7, fig.height= 7, warning=FALSE}
+# Create Visual for Why Animal was Admitted
+ggplot(countintakerefined) +
+ aes(x = Intake_Type, fill = vars, weight = n) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(x = "Reason for Intake", y = "Number of Animals", title = "Reason for Shelter Intake", subtitle = "January 1, 2020 - December 31, 2020", fill = "Intake Method") + 
+  coord_flip() +theme_minimal()
+
+#ggsave("IntakeReasonBart.png", width = 6, height = 7)
+
+```
+Next, I wanted to understand the reasons that animals were brought into shelters. Pictured above are the top six reasons for why animals got taken to a shelter. The most common reason animals ended up in a shelter was because they were taken in as a stray. The second reason animals were brought to shelters was due to individuals returning a fostered pet.
+
+```{r echo=FALSE,  fig.align= 'center', fig.width = 7, fig.height= 7, warning=FALSE}
+# Create Visual for What Color Animal is Admitted the Most 
+intakesandoutcomes %>%
+ filter(Intake_Date >= "2020-01-01" & Intake_Date <= "2020-12-31") %>%
+ ggplot(aes(x = reorder((Animal_PrimaryColor), Animal_PrimaryColor, function(x) length(x)), fill = Animal_Type)) +
+ geom_bar() + 
+  scale_fill_brewer(palette = "Paired") + 
+  labs(x = "Primary Color", y = "Number of Animals", title = "Color of Animals Taken Into Shelters", subtitle = "January 1, 2020 - December 31, 2020", fill = "Animal Type") +
+ coord_flip() +
+ theme_minimal()
+
+#ggsave("animalcolor.png", width = 6, height = 8)
+```
+
+The color of animals brought to shelters were skewed towards generic colors. In aggregate and as standalone, black, white, brown, gray, 
+and tan animals got taken to Sacramento shelters more than any other. 
+The color distribution make sense as the most popular dog breeds are Labradors, German Shepherds, and Poodles. 
+Similarly, the most common hair color for cats is black as it is one of their dominant traits as a species.
+
+```{r echo=FALSE,  fig.align= 'center', fig.width = 7, fig.height= 7, warning=FALSE}
+# Create Visual for What Animal Type is Admitted the Most 
+ggplot(countoflastyrintakes) +
+ aes(x = Animal_Type, fill = Animal_Sex) +
+ geom_bar() +
+ scale_fill_brewer(palette = "Blues") +
+ labs(x = "Type of Animal", y = "Number of Animals ", title = "Distribution of Cats and Dogs Admitted to Shelters", subtitle = "January 1, 2020 - December 31, 2020", fill = "Sex") +
+ theme_minimal()
+
+#ggsave("catordog.png", width = 6, height = 7)
+
+```
+The type of animal most commonly taken to shelters were dogs. Approximately, 1.5 dogs got admitted to the shelter for each cat that got admitted. The reasons behind this are intriguing because we've seen that stray intake contributed the most to the number of animals taken into shelters.
+
+---
+
+
